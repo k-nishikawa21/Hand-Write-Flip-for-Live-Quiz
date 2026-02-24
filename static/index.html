@@ -1,0 +1,131 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Quiz Hand‑Write</title>
+<style>
+  body{font-family:sans-serif;margin:1.5rem}
+  #main{display:flex;gap:12px}
+  #left{flex:1;text-align:center}
+
+  /* ===== 参加者キャンバス ===== */
+  .tile{position:relative;border:1px solid #333;background:#fafafa;display:inline-block}
+  .tile canvas{display:block;width:100%;height:100%}
+
+  /* ===== 管理者グリッド：3 列固定 ===== */
+  #grid{
+    --min:240px;
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;justify-content:center;margin-top:1rem;
+  }
+  #grid .tile{aspect-ratio:16/9;min-width:var(--min)}
+
+  /* ===== 参加者リスト（縦スクロール） ===== */
+  #plist{
+    width:200px;
+    border:1px solid #aaa;
+    padding:6px;
+    background:#fff;          /* ← 追加：常に白背景で不透明 */
+    max-height:80vh;
+    overflow-y:auto;overflow-x:hidden;
+  }
+
+  #plistBody{
+    display:flex;flex-direction:column;gap:4px;   /* ← 縦一列 */
+  }
+  #plistBody label{
+    display:flex;align-items:center;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  #plistBody input{margin-right:4px}
+
+  /* ===== ツールバー & ボタン ===== */
+  #toolbar button{font-size:16px;padding:3px 8px;margin:0 3px;width:48px}
+  #toolbar .sel{outline:2px solid #007bff;border-radius:4px}
+  #clearBtn{margin-top:8px;padding:4px 16px;font-size:1rem}
+
+  /* ===== 結果カラー ===== */
+  .correct{background:#ff3b3b!important}
+  .wrong  {background:#0060ff!important}
+  .invert{filter:invert(100%) grayscale(100%) brightness(220%)}
+</style>
+
+<h2>Quiz Hand‑Write</h2>
+
+<form id="f">
+  <label>Room <input name="room" value="quiz" required></label>
+  <label>Name <input name="name" required></label>
+  <label><input type="checkbox" name="admin"> Admin</label>
+  <button type="submit">Enter</button>
+</form>
+
+<div id="main">
+  <div id="left">
+    <!-- 参加者キャンバス -->
+    <div id="pwrap" class="tile" style="width:800px;height:450px;display:none">
+      <canvas id="cv" width="800" height="450"></canvas>
+    </div>
+
+    <div id="toolbar" hidden>
+      <button data-w="6">6</button><button data-w="12" class="sel">12</button><button data-w="18">18</button>
+    </div>
+    <button id="clearBtn" hidden>消す</button>
+
+    <!-- 管理者グリッド -->
+    <div id="grid" hidden></div>
+  </div>
+
+  <!-- 参加者リスト -->
+  <div id="plist" hidden>
+    <strong>Players</strong><br><br>
+    <div id="plistBody"></div><hr>
+    <button id="showRes">結果表示</button>
+    <button id="resetRes">リセット</button>
+  </div>
+</div>
+
+<script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+<script src="player.js" id="playerJS" hidden></script>
+<script src="admin.js"  id="adminJS"  hidden></script>
+
+<script>
+/* クエリ → フォーム初期値 */
+const qs=new URLSearchParams(location.search),form=document.getElementById("f");
+form.room.value=qs.get("room")||"quiz";
+form.name.value=qs.get("name")||"";
+form.admin.checked=!!qs.get("admin");
+
+/* 入室 */
+form.addEventListener("submit",e=>{
+  e.preventDefault();
+  const data={room:form.room.value.trim(),name:form.name.value.trim()||"guest",admin:form.admin.checked};
+  history.replaceState({}, "","/?room="+encodeURIComponent(data.room)+"&name="+encodeURIComponent(data.name)+(data.admin?"&admin=1":""));
+  startApp(data);
+});
+
+function startApp({room,name,admin}){
+  form.hidden=true;
+  const sock=io();
+  sock.emit("join",{role:admin?"admin":"player",room,name});
+
+  if(admin){
+    document.getElementById("pwrap").style.display="none";
+    document.getElementById("grid").hidden=false;
+    document.getElementById("plist").hidden=false;
+    document.getElementById("adminJS").hidden=false;
+    window.initAdmin(sock,room);
+  }else{
+    const pwrap=document.getElementById("pwrap");
+    pwrap.style.display="inline-block";
+    document.getElementById("toolbar").hidden=false;
+    document.getElementById("clearBtn").hidden=false;
+    document.getElementById("playerJS").hidden=false;
+    window.initPlayer(
+      sock,document.getElementById("cv"),
+      room,name,
+      document.getElementById("clearBtn"),
+      document.getElementById("toolbar"),
+      pwrap
+    );
+  }
+}
+</script>
